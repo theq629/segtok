@@ -305,16 +305,16 @@ def word_tokenizer_with_spans(sentence):
     pruned = HYPHENATED_LINEBREAK.sub(prune, sentence)
 
     prune_shift = [(0, 0)]
-    def make_token((span_text, span_span), (token_text, token_span)):
-        abs_start = span_span[0] + token_span[0]
-        abs_end = span_span[0] + token_span[1]
+    def make_token(span_span, token_span):
+        span_text, span_span = span_span
+        token_text, token_span = token_span
         shift_dist, next_prune = prune_shift[-1]
-        abs_start += shift_dist
-        if next_prune < len(pruned_spans) and pruned_spans[next_prune][1] <= abs_end:
-            assert pruned_spans[next_prune][0] >= abs_start
-            shift_dist += pruned_spans[next_prune][1] - pruned_spans[next_prune][0]
-            prune_shift.append((shift_dist, next_prune + 1))
-        abs_end += shift_dist
+        abs_start = span_span[0] + token_span[0] + shift_dist
+        abs_end = span_span[0] + token_span[1] + shift_dist
+        if next_prune < len(pruned_spans) and pruned_spans[next_prune][0] < abs_end:
+            shift_dist_change = pruned_spans[next_prune][1] - pruned_spans[next_prune][0]
+            prune_shift.append((shift_dist + shift_dist_change, next_prune + 1))
+            abs_end += shift_dist_change
         return token_text, (abs_start, abs_end)
     token_spans = [make_token(span_span, token_span)
                 for span_span in space_tokenizer_with_spans(pruned)
@@ -322,10 +322,9 @@ def word_tokenizer_with_spans(sentence):
                 if token_span[0] != ""
             ]
 
-    """
     # splice the sentence terminal off the last word/token if it has any at its borders
     # only look for the sentence terminal in the last three tokens
-    for idx, word in enumerate(reversed(tokens[-3:]), 1):
+    for idx, (word, span) in enumerate(reversed(token_spans[-3:]), 1):
         if (word_tokenizer.match(word) and not APO_MATCHER.match(word)) or \
                 any(t in word for t in SENTENCE_TERMINALS):
             last = len(word) - 1
@@ -335,12 +334,12 @@ def word_tokenizer_with_spans(sentence):
                 pass  # leave the token as it is
             elif any(word.rfind(t) == last for t in SENTENCE_TERMINALS):
                 # "stuff."
-                tokens[-idx] = word[:-1]
-                tokens.insert(len(tokens) - idx + 1, word[-1])
+                token_spans[-idx] = (word[:-1], (span[0], span[1] - 1))
+                token_spans.insert(len(token_spans) - idx + 1, (word[-1], (span[1] - 1, span[1])))
             elif any(word.find(t) == 0 for t in SENTENCE_TERMINALS):
                 # ".stuff"
-                tokens[-idx] = word[0]
-                tokens.insert(len(tokens) - idx, word[:-1])
+                token_spans[-idx] = (word[0], (span[0], span[0] + 1))
+                token_spans.insert(len(token_spans) - idx, (word[:-1], (span[0], span[1] - 1)))
 
             break
 
@@ -349,17 +348,17 @@ def word_tokenizer_with_spans(sentence):
     while dirty:
         dirty = False
 
-        for idx, word in enumerate(reversed(tokens), 1):
+        for idx, (word, span) in enumerate(reversed(token_spans), 1):
             while len(word) > 1 and word[-1] in u',;:':
                 char = word[-1]  # the dangling comma/colon
                 word = word[:-1]
-                tokens[-idx] = word
-                tokens.insert(len(tokens) - idx + 1, char)
+                span = span[0], span[1] - 1
+                token_spans[-idx] = (word, span)
+                token_spans.insert(len(token_spans) - idx + 1, (char, (span[1], span[1] + 1)))
                 idx += 1
                 dirty = True
             if dirty:
                 break  # restart check to avoid index errors
-    """
 
     return token_spans
 
