@@ -153,8 +153,10 @@ def _matches(regex):
     """Regular expression compiling function decorator."""
     def match_decorator(fn):
         automaton = compile(regex, UNICODE | VERBOSE)
+        fn.regex = regex
         fn.split = automaton.split
         fn.match = automaton.match
+        fn.finditer = automaton.finditer
         return fn
 
     return match_decorator
@@ -275,6 +277,91 @@ def word_tokenizer(sentence):
                 break  # restart check to avoid index errors
 
     return tokens
+
+def split_with_spans(finditer, text):
+    last_end = 0
+    for match in finditer(text):
+        yield text[last_end:match.start()], (last_end, match.start())
+        for group_i, match_group in enumerate(match.groups()):
+            yield match_group, (match.start(group_i), match.end(group_i))
+        last_end = match.end()
+    yield text[last_end:len(text)], (last_end, len(text))
+
+def space_tokenizer_with_spans(sentence):
+    """
+    Like `space_tokenizer()` but keeps spans from the original text.
+    """
+    return [token_span for token_span in split_with_spans(space_tokenizer.finditer, sentence) if token_span[0] != ""]
+
+def word_tokenizer_with_spans(sentence):
+    """
+    Like `word_tokenizer()` but keeps spans from the orginal text.
+    """
+
+    pruned_spans = []
+    def prune(match):
+        pruned_spans.append((match.end(1), match.start(2)))
+        return match.group(1) + match.group(2)
+    pruned = HYPHENATED_LINEBREAK.sub(prune, sentence)
+
+    prune_shift = [(0, 0)]
+    def make_token((span_text, span_span), (token_text, token_span)):
+        abs_start = span_span[0] + token_span[0]
+        abs_end = span_span[0] + token_span[1]
+        shift_dist, next_prune = prune_shift[-1]
+        abs_start += shift_dist
+        if next_prune < len(pruned_spans) and pruned_spans[next_prune][1] <= abs_end:
+            assert pruned_spans[next_prune][0] >= abs_start
+            shift_dist += pruned_spans[next_prune][1] - pruned_spans[next_prune][0]
+            prune_shift.append((shift_dist, next_prune + 1))
+        abs_end += shift_dist
+        return token_text, (abs_start, abs_end)
+    token_spans = [make_token(span_span, token_span)
+                for span_span in space_tokenizer_with_spans(pruned)
+                for token_span in split_with_spans(word_tokenizer.finditer, span_span[0])
+                if token_span[0] != ""
+            ]
+
+    """
+    # splice the sentence terminal off the last word/token if it has any at its borders
+    # only look for the sentence terminal in the last three tokens
+    for idx, word in enumerate(reversed(tokens[-3:]), 1):
+        if (word_tokenizer.match(word) and not APO_MATCHER.match(word)) or \
+                any(t in word for t in SENTENCE_TERMINALS):
+            last = len(word) - 1
+
+            if 0 == last or u'...' == word:
+                # any case of "..." or any single char (last == 0)
+                pass  # leave the token as it is
+            elif any(word.rfind(t) == last for t in SENTENCE_TERMINALS):
+                # "stuff."
+                tokens[-idx] = word[:-1]
+                tokens.insert(len(tokens) - idx + 1, word[-1])
+            elif any(word.find(t) == 0 for t in SENTENCE_TERMINALS):
+                # ".stuff"
+                tokens[-idx] = word[0]
+                tokens.insert(len(tokens) - idx, word[:-1])
+
+            break
+
+    # keep splicing off any dangling commas and (semi-) colons
+    dirty = True
+    while dirty:
+        dirty = False
+
+        for idx, word in enumerate(reversed(tokens), 1):
+            while len(word) > 1 and word[-1] in u',;:':
+                char = word[-1]  # the dangling comma/colon
+                word = word[:-1]
+                tokens[-idx] = word
+                tokens.insert(len(tokens) - idx + 1, char)
+                idx += 1
+                dirty = True
+            if dirty:
+                break  # restart check to avoid index errors
+    """
+
+    return token_spans
 
 
 @_matches(r"""
