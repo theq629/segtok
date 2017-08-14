@@ -444,6 +444,19 @@ def web_tokenizer(sentence):
             for token in ((span,) if i % 2 else word_tokenizer(unescape(span)))]
 
 
+def web_tokenizer_with_spans(sentence):
+    """
+    Like `web_tokenizer()` but with spans.
+    """
+    return [token_with_span
+            for i, (span_text, span_span) in enumerate(re_utils.split_with_spans(web_tokenizer.regex, sentence))
+            for token_with_span in (
+                    ((span_text, span_span),) if i % 2
+                    else (span_utils.make_sub((span_text, span_span), (unescape(t_t), t_s)) for t_t, t_s in word_tokenizer_with_spans(span_text))
+                )
+        ]
+
+
 def main():
     # tokenize one sentence per line input
     from argparse import ArgumentParser

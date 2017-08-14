@@ -4,7 +4,7 @@ import re
 from unittest import TestCase
 from segtok.tokenizer import space_tokenizer, symbol_tokenizer, word_tokenizer, web_tokenizer, IS_POSSESSIVE, \
     split_possessive_markers, IS_CONTRACTION, split_contractions
-from segtok.tokenizer import space_tokenizer_with_spans, symbol_tokenizer_with_spans, word_tokenizer_with_spans, split_possessive_markers_with_spans, split_contractions_with_spans
+from segtok.tokenizer import space_tokenizer_with_spans, symbol_tokenizer_with_spans, word_tokenizer_with_spans, web_tokenizer_with_spans, split_possessive_markers_with_spans, split_contractions_with_spans
 from segtok.tokenizer import unescape
 import span_utils
 
@@ -402,3 +402,9 @@ class TestWebTokenizer(TestCase):
             children ( P = 0.02 ; http://univ.edu.es/study.html ) [ 20-22 ] .
         """.split()
         self.assertEqual(tokens, self.tokenizer(sentence))
+
+class TestWebTokenizerWithSpans(TestWebTokenizer):
+
+    def setUp(self):
+        ws_re = re.compile(r"\s+")
+        self.tokenizer = span_utils.test_sequencer_with_spans(self, web_tokenizer_with_spans, normalize_token=lambda t: ws_re.sub("", t), normalize_original=lambda t: ws_re.sub("", unescape(t)))
