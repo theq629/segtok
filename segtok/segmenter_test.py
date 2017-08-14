@@ -4,7 +4,7 @@ from unittest import TestCase
 from segtok.segmenter import split_single, split_multi, MAY_CROSS_ONE_LINE, \
     split_newline, rewrite_line_separators, ABBREVIATIONS, CONTINUATIONS, \
     NON_UNIX_LINEBREAK, to_unix_linebreaks
-from segtok.segmenter import split_single_with_spans, split_multi_with_spans, split_newline_with_spans
+from segtok.segmenter import split_single_with_spans, split_multi_with_spans, split_newline_with_spans, rewrite_line_separators_with_spans
 import span_utils
 
 
@@ -85,6 +85,7 @@ class TestSentenceSegmenter(TestCase):
         self.split_single = split_single
         self.split_multi = split_multi
         self.split_newline = split_newline
+        self.rewrite_line_separators = rewrite_line_separators
         self.maxDiff = None
 
     def test_ABBREVIATIONS_abbrevs(self):
@@ -216,7 +217,7 @@ class TestSentenceSegmenter(TestCase):
     def test_rewrite(self):
         # noinspection PyTypeChecker
         a_text = OSPL.replace('\n', '\u2028').replace(' ', '\n')
-        result = rewrite_line_separators(a_text, MAY_CROSS_ONE_LINE)
+        result = self.rewrite_line_separators(a_text, MAY_CROSS_ONE_LINE)
         self.assertSequenceEqual(OSPL, ''.join(result))
 
 class TestSentenceSegmenterWithSpans(TestSentenceSegmenter):
@@ -224,4 +225,5 @@ class TestSentenceSegmenterWithSpans(TestSentenceSegmenter):
         self.split_single = test_segmenter_with_spans(self, split_single_with_spans)
         self.split_multi = test_segmenter_with_spans(self, split_multi_with_spans)
         self.split_newline = test_segmenter_with_spans(self, split_newline_with_spans)
+        self.rewrite_line_separators = span_utils.test_sequencer_with_spans(self, rewrite_line_separators_with_spans, normalize_original=lambda t: t.replace("\n", " ").replace("\u2028", ""))
         self.maxDiff = None

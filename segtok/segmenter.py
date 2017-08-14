@@ -281,6 +281,36 @@ def rewrite_line_separators(text, pattern, join_on_lowercase=False,
         yield text[offset:]
 
 
+def rewrite_line_separators_with_spans(text, pattern, join_on_lowercase=False,
+                            short_sentence_length=SHORT_SENTENCE_LENGTH):
+    """
+    Remove line separator chars inside sentences and ensure there is a ``\\n`` at their end.
+
+    :param text: input plain-text
+    :param pattern: for the initial sentence splitting
+    :param join_on_lowercase: always join sentences that start with lower-case
+    :param short_sentence_length: the upper boundary for text spans that are not split
+                                  into sentences inside brackets
+    :return: a generator yielding the spans of text
+    """
+    offset = 0
+
+    for sentence_text, sentence_span in _sentences_with_spans(re_utils.split_with_spans(pattern, text), join_on_lowercase, short_sentence_length):
+        start = text.index(sentence_text, offset)
+        intervening = text[offset:start]
+
+        if offset != 0 and '\n' not in intervening:
+            yield '\n', None
+            intervening = intervening[1:]
+
+        yield intervening, (offset, start)
+        yield sentence_text.replace('\n', ' '), (start, start + len(sentence_text))
+        offset = start + len(sentence_text)
+
+    if offset < len(text):
+        yield text[offset:], (offset, len(text))
+
+
 def to_unix_linebreaks(text):
     """Replace non-Unix linebreak sequences (Windows, Mac, Unicode) with newlines (\\n)."""
     return NON_UNIX_LINEBREAK.sub('\n', text)

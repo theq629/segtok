@@ -7,9 +7,9 @@ def test_sequencer_with_spans(tester, sequencer, normalize_token=lambda x: x, no
     """
     Wrap a function that provides a sequence of items with spans to work as a regular spanless sequence, and also test that its token values match the values its spans give in the original text.
     """
-    def wrapped(text):
-        items_with_spans = list(sequencer(text))
+    def wrapped(text, *args, **kwargs):
+        items_with_spans = list(sequencer(text, *args, **kwargs))
         items = [t for t, s in items_with_spans]
-        tester.assertSequenceEqual([normalize_token(t) for t in items], [normalize_original(text[s[0]:s[1]]) for _, s in items_with_spans])
+        tester.assertSequenceEqual([normalize_token(t) for t, s in items_with_spans if s is not None], [normalize_original(text[s[0]:s[1]]) for _, s in items_with_spans if s is not None])
         return items
     return wrapped
