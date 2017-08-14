@@ -27,6 +27,8 @@ except ImportError:
     # noinspection PyUnresolvedReferences
     from .segmenter import SENTENCE_TERMINALS, HYPHENS
 
+import re_utils
+
 
 __author__ = 'Florian Leitner <florian.leitner@gmail.com>'
 
@@ -153,10 +155,9 @@ def _matches(regex):
     """Regular expression compiling function decorator."""
     def match_decorator(fn):
         automaton = compile(regex, UNICODE | VERBOSE)
-        fn.regex = regex
+        fn.regex = automaton
         fn.split = automaton.split
         fn.match = automaton.match
-        fn.finditer = automaton.finditer
         return fn
 
     return match_decorator
@@ -278,20 +279,11 @@ def word_tokenizer(sentence):
 
     return tokens
 
-def split_with_spans(finditer, text):
-    last_end = 0
-    for match in finditer(text):
-        yield text[last_end:match.start()], (last_end, match.start())
-        for group_i, match_group in enumerate(match.groups()):
-            yield match_group, (match.start(group_i), match.end(group_i))
-        last_end = match.end()
-    yield text[last_end:len(text)], (last_end, len(text))
-
 def space_tokenizer_with_spans(sentence):
     """
     Like `space_tokenizer()` but keeps spans from the original text.
     """
-    return [token_with_span for token_with_span in split_with_spans(space_tokenizer.finditer, sentence) if token_with_span[0] != ""]
+    return [token_with_span for token_with_span in re_utils.split_with_spans(space_tokenizer.regex, sentence) if token_with_span[0] != ""]
 
 def word_tokenizer_with_spans(sentence):
     """
@@ -304,6 +296,7 @@ def word_tokenizer_with_spans(sentence):
         return match.group(1) + match.group(2)
     pruned = HYPHENATED_LINEBREAK.sub(prune, sentence)
 
+    # Note: below the original code uses "span" to refer to the initial space-seperated tokens
     prune_shift = [(0, 0)]
     def make_token(span_with_span, token_with_span):
         span_text, span_span = span_with_span
@@ -318,7 +311,7 @@ def word_tokenizer_with_spans(sentence):
         return token_text, (abs_start, abs_end)
     tokens_with_spans = [make_token(span_with_span, token_with_span)
                 for span_with_span in space_tokenizer_with_spans(pruned)
-                for token_with_span in split_with_spans(word_tokenizer.finditer, span_with_span[0])
+                for token_with_span in re_utils.split_with_spans(word_tokenizer.regex, span_with_span[0])
                 if token_with_span[0] != ""
             ]
 

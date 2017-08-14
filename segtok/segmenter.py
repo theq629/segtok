@@ -28,6 +28,8 @@ Convert the text to Unix linebreaks if the case.
 from __future__ import absolute_import, unicode_literals
 import codecs
 from regex import compile, DOTALL, UNICODE, VERBOSE
+import re_utils
+import span_utils
 
 
 __author__ = 'Florian Leitner <florian.leitner@gmail.com>'
@@ -216,6 +218,39 @@ def split_newline(text):
             yield line
 
 
+def split_single_with_spans(text, join_on_lowercase=False, short_sentence_length=SHORT_SENTENCE_LENGTH):
+    """
+    Like `split_single()` but with spans.
+    """
+    sentences = _sentences_with_spans(re_utils.split_with_spans(DO_NOT_CROSS_LINES, text), join_on_lowercase, short_sentence_length)
+    return [span_utils.make_sub((ss_text, ss_span), s)
+            for ss_text, ss_span in sentences
+            for s in split_newline_with_spans(ss_text)
+        ]
+
+
+def split_multi_with_spans(text, join_on_lowercase=False, short_sentence_length=SHORT_SENTENCE_LENGTH):
+    """
+    Like `split_multi()` but with spans.
+    """
+    return _sentences_with_spans(re_utils.split_with_spans(MAY_CROSS_ONE_LINE, text), join_on_lowercase, short_sentence_length)
+
+
+def split_newline_with_spans(text):
+    """
+    Like `split_newline()` but with spans.
+    """
+
+    start_i = 0
+    for line in text.split('\n'):
+        line = line.strip()
+
+        if line:
+            yield line, (start_i, start_i + len(line) + 1)
+
+        start_i += len(line) + 1
+
+
 def rewrite_line_separators(text, pattern, join_on_lowercase=False,
                             short_sentence_length=SHORT_SENTENCE_LENGTH):
     """
@@ -284,6 +319,46 @@ def _sentences(spans, join_on_lowercase, short_sentence_length):
         yield last.strip()
 
 
+def _sentences_with_spans(spans, join_on_lowercase, short_sentence_length):
+    """Join spans back together into sentences as necessary."""
+    last = None
+    shorterThanATypicalSentence = lambda c, l: c < short_sentence_length or l < short_sentence_length
+
+    for current in _abbreviation_joiner_with_spans(spans):
+        current_text, current_span = current
+        if last is not None:
+            last_text, last_span = last
+            if (join_on_lowercase or BEFORE_LOWER.match(last_text)) and LOWER_WORD.match(current_text):
+                do_join = True
+            elif shorterThanATypicalSentence(len(current_text), len(last_text)) and _is_open(last_text) and (
+                _is_not_opened(current_text) or last_text.endswith(' et al. ') or (
+                    UPPER_CASE_END.search(last_text) and UPPER_CASE_START.match(current_text)
+                )
+            ):
+                do_join = True
+            elif shorterThanATypicalSentence(len(current_text), len(last_text)) and _is_open(last_text, '[]') and (
+                _is_not_opened(current_text, '[]') or last_text.endswith(' et al. ') or (
+                    UPPER_CASE_END.search(last_text) and UPPER_CASE_START.match(current_text)
+                )
+            ):
+                do_join = True
+            elif CONTINUATIONS.match(current_text):
+                do_join = True
+            else:
+                do_join = False
+            if do_join:
+                last = ('%s%s' % (last_text, current_text), (last_span[0], current_span[1]))
+            else:
+                yield (last_text.strip(), last_span)
+                last = current
+        else:
+            last = current
+
+    if last is not None:
+        last_text, last_span = last
+        yield (last_text.strip(), last_span)
+
+
 def _abbreviation_joiner(spans):
     """Join spans that match the ABBREVIATIONS pattern."""
     segment = None
@@ -304,6 +379,44 @@ def _abbreviation_joiner(spans):
                     LONE_WORD.match(next_s) or
                     (ENDS_IN_DATE_DIGITS.search(prev_s) and MONTH.match(next_s)) or
                     (MIDDLE_INITIAL_END.search(prev_s) and UPPER_WORD_START.match(next_s))
+                    ):
+                pass # join
+            else:
+                yield makeSentence(segment, pos + 1)
+                segment = None
+        elif segment is None:
+            segment = pos
+
+    if segment is not None:
+        yield makeSentence(segment, total)
+
+
+def _abbreviation_joiner_with_spans(spans):
+    """Join spans that match the ABBREVIATIONS pattern."""
+
+    # Note: here the original code uses "span" to refer to an initial segment of the text
+
+    spans = list(spans)
+    segment = None
+    def makeSentence(start, end):
+        text = ''.join(s_t for s_t, s_s in spans[start:end])
+        return text, (spans[start][1][0], spans[end - 1][1][1])
+    total = len(spans)
+
+    for pos in range(total):
+        if pos and pos % 2:  # even => segment, uneven => (potential) terminal
+            prev_s_text, prev_s_span = spans[pos - 1]
+            marker_text, marker_span, = spans[pos]
+            next_s_text, next_s_span, = spans[pos+1] if pos + 1 < total else None
+
+            if prev_s_text[-1:].isspace():
+                pass # join
+            elif marker_text[0] == '.' and ABBREVIATIONS.search(prev_s_text):
+                pass # join
+            elif marker_text[0] == '.' and next_s_text and (
+                    LONE_WORD.match(next_s_text) or
+                    (ENDS_IN_DATE_DIGITS.search(prev_s_text) and MONTH.match(next_s_text)) or
+                    (MIDDLE_INITIAL_END.search(prev_s_text) and UPPER_WORD_START.match(next_s_text))
                     ):
                 pass # join
             else:

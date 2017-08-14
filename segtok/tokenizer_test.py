@@ -5,21 +5,16 @@ from unittest import TestCase
 from segtok.tokenizer import space_tokenizer, symbol_tokenizer, word_tokenizer, web_tokenizer, IS_POSSESSIVE, \
     split_possessive_markers, IS_CONTRACTION, split_contractions
 from segtok.tokenizer import space_tokenizer_with_spans, word_tokenizer_with_spans
+import span_utils
 
 __author__ = 'Florian Leitner <florian.leitner@gmail.com>'
 
 
-def wrap_tokenizer_with_spans(tester, tokenizer):
-    """
-    Wrap a tokenizer that provides spans to work as a regular tokenizer, and also test that its token values match the values its spans give in the original text (up to newline differences to account for hyphenization plus newline).
-    """
+def test_tokenizer_with_spans(tester, tokenizer):
     newline_re = re.compile(r"\s*[\n\r]+\s*")
-    def wrapped(text):
-        tokens_with_spans = tokenizer(text)
-        tokens = [w for w, s in tokens_with_spans]
-        tester.assertSequenceEqual(tokens, [newline_re.sub("", text[s[0]:s[1]]) for w, s in tokens_with_spans])
-        return tokens
-    return wrapped
+    def normalize(token_text):
+        return newline_re.sub("", token_text)
+    return span_utils.test_sequencer_with_spans(tester, tokenizer, normalize_item=normalize)
 
 class TestPossessiveMarker(TestCase):
 
@@ -105,7 +100,7 @@ class TestSpaceTokenizer(TestCase):
 class TestSpaceTokenizerWithSpans(TestSpaceTokenizer):
 
     def setUp(self):
-        self.tokenizer = wrap_tokenizer_with_spans(self, space_tokenizer_with_spans)
+        self.tokenizer = test_tokenizer_with_spans(self, space_tokenizer_with_spans)
 
 class TestSymbolTokenizer(TestCase):
 
@@ -328,7 +323,7 @@ class TestWordTokenizer(TestCase):
 class TestWordTokenizerWithSpans(TestWordTokenizer):
 
     def setUp(self):
-        self.tokenizer = wrap_tokenizer_with_spans(self, word_tokenizer_with_spans)
+        self.tokenizer = test_tokenizer_with_spans(self, word_tokenizer_with_spans)
 
 class TestWebTokenizer(TestCase):
 

@@ -4,6 +4,8 @@ from unittest import TestCase
 from segtok.segmenter import split_single, split_multi, MAY_CROSS_ONE_LINE, \
     split_newline, rewrite_line_separators, ABBREVIATIONS, CONTINUATIONS, \
     NON_UNIX_LINEBREAK, to_unix_linebreaks
+from segtok.segmenter import split_single_with_spans, split_multi_with_spans, split_newline_with_spans
+import span_utils
 
 
 OSPL = """One sentence per line.
@@ -65,6 +67,12 @@ SENTENCES = OSPL.split('\n')
 TEXT = ' '.join(SENTENCES)
 
 
+def test_segmenter_with_spans(tester, tokenizer):
+    def normalize(token_text):
+        return token_text.strip()
+    return span_utils.test_sequencer_with_spans(tester, tokenizer, normalize_item=normalize)
+
+
 class TestToUnixLinebreak(TestCase):
 
     def test_function(self):
@@ -74,6 +82,9 @@ class TestToUnixLinebreak(TestCase):
 class TestSentenceSegmenter(TestCase):
 
     def setUp(self):
+        self.split_single = split_single
+        self.split_multi = split_multi
+        self.split_newline = split_newline
         self.maxDiff = None
 
     def test_ABBREVIATIONS_abbrevs(self):
@@ -112,98 +123,105 @@ class TestSentenceSegmenter(TestCase):
             self.assertTrue(NON_UNIX_LINEBREAK.search(example) is None, repr(example))
 
     def test_simple_case(self):
-        self.assertEqual(['This is a test.'], list(split_single("This is a test.")))
+        self.assertEqual(['This is a test.'], list(self.split_single("This is a test.")))
 
     def test_regex(self):
-        self.assertSequenceEqual(SENTENCES, list(split_single(TEXT)))
+        self.assertSequenceEqual(SENTENCES, list(self.split_single(TEXT)))
 
     def test_names(self):
         sentences = ["Written by A. McArthur, K. Elvin, and D. Eden.",
                      "This is Mr. A. Starr over there.",
                      "B. Boyden is over there."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_alpha_items(self):
         sentences = ["This is figure A, B, and C.", "This is table A and B.", "That is item A, B."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_author_list(self):
         sentences = ["R. S. Kauffman, R. Ahmed, and B. N. Fields show stuff in their paper."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_long_bracket_abbervation(self):
         sentences = ["This is expected, on the basis of (Olmsted, M. C., C. F. Anderson, "
                      "and M. T. Record, Jr. 1989. Proc. Natl. Acad. Sci. USA. 100:100), "
                      "to decrease sharply."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_continuations(self):
         sentences = ["colonic colonization inhibits development of inflammatory lesions.",
                      "to investigate whether an inf. of the pancreas was the case...",
                      "though we hate to use capital lett. that usually separate sentences."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_inner_names(self):
         sentences = ["Bla bla [Sim et al. (1981) Biochem. J. 193, 129-141].",
                      "The adjusted (ml. min-1. 1.73 m-2) rate."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_species_names(self):
         sentences = ["Their presence was detected by transformation into S. lividans.",
                      "Three subjects diagnosed as having something."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_species_names_tough(self):
         sentences = ["The level of the genus Allomonas gen. nov. with so "
                      "far the only species A. enterica known."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_european_dates(self):
         sentences = ["Der Unfall am 24. Dezember 2016.",
                      "Am 13. Jän. 2006 war es regnerisch.",
                      "Am 13. 1. 2006 war es regnerisch."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_middle_name_initials(self):
         sentences = ["The administrative basis for Lester B. Pearson's foreign policy was developed later.",
                      "This model was introduced by Dr. Edgar F. Codd after initial criticisms."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_multiline(self):
         text = "This is a\nmultiline sentence. And this is Mr.\nAbbrevation."
         ml_sentences = ["This is a\nmultiline sentence.", "And this is Mr.\nAbbrevation."]
-        self.assertSequenceEqual(ml_sentences, list(split_multi(text)))
+        self.assertSequenceEqual(ml_sentences, list(self.split_multi(text)))
 
     def test_parenthesis(self):
         sentences = ["Nested ((Parenthesis. (With words right (inside))) (More stuff. "
                      "Uff, this is it!))", "In the Big City."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_parenthesis_with_sentences(self):
         sentences = ["The segmenter segments on single lines or to consecutive lines.",
                      "(If you want to extract sentences that cross newlines, remove those line-breaks.",
                      "Segtok assumes your content has some minimal semantical meaning.)",
                      "It gracefully handles this and similar issues."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_unclosed_brackets(self):
         sentences = ["The medial preoptic area (MPOA), and 2) did not decrease Fos-lir.",
                      "However, olfactory desensitizations did decrease Fos-lir."]
-        self.assertSequenceEqual(sentences, list(split_single(' '.join(sentences))))
+        self.assertSequenceEqual(sentences, list(self.split_single(' '.join(sentences))))
 
     def test_linebreak(self):
         text = "This is a\nmultiline sentence."
-        self.assertSequenceEqual(text.split('\n'), list(split_single(text)))
+        self.assertSequenceEqual(text.split('\n'), list(self.split_single(text)))
 
     def test_linebreak2(self):
         text = "Folding Beijing\nby Hao Jingfang"
-        self.assertSequenceEqual(text.split('\n'), list(split_single(text)))
+        self.assertSequenceEqual(text.split('\n'), list(self.split_single(text)))
 
     def test_newline(self):
-        self.assertSequenceEqual(SENTENCES, list(split_newline(OSPL)))
+        self.assertSequenceEqual(SENTENCES, list(self.split_newline(OSPL)))
 
     def test_rewrite(self):
         # noinspection PyTypeChecker
         a_text = OSPL.replace('\n', '\u2028').replace(' ', '\n')
         result = rewrite_line_separators(a_text, MAY_CROSS_ONE_LINE)
         self.assertSequenceEqual(OSPL, ''.join(result))
+
+class TestSentenceSegmenterWithSpans(TestSentenceSegmenter):
+    def setUp(self):
+        self.split_single = test_segmenter_with_spans(self, split_single_with_spans)
+        self.split_multi = test_segmenter_with_spans(self, split_multi_with_spans)
+        self.split_newline = test_segmenter_with_spans(self, split_newline_with_spans)
+        self.maxDiff = None
