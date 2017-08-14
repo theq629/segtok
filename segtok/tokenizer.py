@@ -106,28 +106,6 @@ def split_possessive_markers(tokens):
     """
     idx = -1
 
-    for token in list(tokens):
-        idx += 1
-
-        if IS_POSSESSIVE.match(token) is not None:
-            if token[-1].lower() == 's' and token[-2] in APOSTROPHES:
-                tokens.insert(idx, token[:-2])
-                idx += 1
-                tokens[idx] = token[-2:]
-            elif token[-2].lower() == 's' and token[-1] in APOSTROPHES:
-                tokens.insert(idx, token[:-1])
-                idx += 1
-                tokens[idx] = token[-1:]
-
-    return tokens
-
-
-def split_possessive_markers_with_spans(tokens):
-    """
-    Like `split_possessive_markers()` but with spans.
-    """
-    idx = -1
-
     for token_text, token_span in list(tokens):
         idx += 1
 
@@ -152,31 +130,6 @@ def split_contractions(tokens_with_spans):
 
     :param tokens: a list of tokens
     :returns: an updated list if a split was made or the original list otherwise
-    """
-    idx = -1
-
-    for token in list(tokens_with_spans):
-        idx += 1
-
-        if IS_CONTRACTION.match(token) is not None:
-            length = len(token)
-
-            if length > 1:
-                for pos in range(length - 1, -1, -1):
-                    if token[pos] in APOSTROPHES:
-                        if 2 < length and pos + 2 == length and token[-1] == 't' and token[pos - 1] == 'n':
-                            pos -= 1
-
-                        tokens_with_spans.insert(idx, token[:pos])
-                        idx += 1
-                        tokens_with_spans[idx] = token[pos:]
-
-    return tokens_with_spans
-
-
-def split_contractions_with_spans(tokens_with_spans):
-    """
-    Like `split_contractions()` but with spans.
     """
     idx = -1
 
@@ -219,7 +172,7 @@ def space_tokenizer(sentence):
     Split on Unicode spaces ``\\s+`` (i.e., any kind of **Unicode** space character).
     The separating space characters are not included in the resulting token list.
     """
-    return [token for token in space_tokenizer.split(sentence) if token]
+    return [token_with_span for token_with_span in re_utils.split_with_spans(space_tokenizer.regex, sentence) if token_with_span[0] != ""]
 
 
 @_matches(r'(%s+)' % ALNUM)
@@ -229,8 +182,11 @@ def symbol_tokenizer(sentence):
 
     Separates alphanumeric Unicode character sequences in already space-split tokens.
     """
-    return [token for span in space_tokenizer(sentence) for
-            token in symbol_tokenizer.split(span) if token]
+    return [span_utils.make_sub((span_text, span_span), token_with_span)
+            for span_text, span_span in space_tokenizer(sentence)
+            for token_with_span in re_utils.split_with_spans(symbol_tokenizer.regex, span_text)
+            if token_with_span[0] != ""
+        ]
 
 
 @_matches(r"""((?:
@@ -284,77 +240,12 @@ def word_tokenizer(sentence):
        in the range from yocto, y (10^-24) to yotta, Y (10^+24)).
     6. Subscript digits are attached if prefixed with letters that look like a chemical formula.
     """
-    pruned = HYPHENATED_LINEBREAK.sub(r'\1\2', sentence)
-    tokens = [token for span in space_tokenizer(pruned) for
-              token in word_tokenizer.split(span) if token]
-
-    # splice the sentence terminal off the last word/token if it has any at its borders
-    # only look for the sentence terminal in the last three tokens
-    for idx, word in enumerate(reversed(tokens[-3:]), 1):
-        if (word_tokenizer.match(word) and not APO_MATCHER.match(word)) or \
-                any(t in word for t in SENTENCE_TERMINALS):
-            last = len(word) - 1
-
-            if 0 == last or u'...' == word:
-                # any case of "..." or any single char (last == 0)
-                pass  # leave the token as it is
-            elif any(word.rfind(t) == last for t in SENTENCE_TERMINALS):
-                # "stuff."
-                tokens[-idx] = word[:-1]
-                tokens.insert(len(tokens) - idx + 1, word[-1])
-            elif any(word.find(t) == 0 for t in SENTENCE_TERMINALS):
-                # ".stuff"
-                tokens[-idx] = word[0]
-                tokens.insert(len(tokens) - idx, word[:-1])
-
-            break
-
-    # keep splicing off any dangling commas and (semi-) colons
-    dirty = True
-    while dirty:
-        dirty = False
-
-        for idx, word in enumerate(reversed(tokens), 1):
-            while len(word) > 1 and word[-1] in u',;:':
-                char = word[-1]  # the dangling comma/colon
-                word = word[:-1]
-                tokens[-idx] = word
-                tokens.insert(len(tokens) - idx + 1, char)
-                idx += 1
-                dirty = True
-            if dirty:
-                break  # restart check to avoid index errors
-
-    return tokens
-
-def space_tokenizer_with_spans(sentence):
-    """
-    Like `space_tokenizer()` but keeps spans from the original text.
-    """
-    return [token_with_span for token_with_span in re_utils.split_with_spans(space_tokenizer.regex, sentence) if token_with_span[0] != ""]
-
-def symbol_tokenizer_with_spans(sentence):
-    """
-    Like `symbol_tokenizer()` but keeps spans from the original text.
-    """
-    return [span_utils.make_sub((span_text, span_span), token_with_span)
-            for span_text, span_span in space_tokenizer_with_spans(sentence)
-            for token_with_span in re_utils.split_with_spans(symbol_tokenizer.regex, span_text)
-            if token_with_span[0] != ""
-        ]
-
-def word_tokenizer_with_spans(sentence):
-    """
-    Like `word_tokenizer()` but keeps spans from the orginal text.
-    """
-
     pruned_spans = []
     def prune(match):
         pruned_spans.append((match.end(1), match.start(2)))
         return match.group(1) + match.group(2)
     pruned = HYPHENATED_LINEBREAK.sub(prune, sentence)
 
-    # Note: below the original code uses "span" to refer to the initial space-seperated tokens
     prune_shift = [(0, 0)]
     def make_token(span_with_span, token_with_span):
         span_text, span_span = span_with_span
@@ -368,7 +259,7 @@ def word_tokenizer_with_spans(sentence):
             abs_end += shift_dist_change
         return token_text, (abs_start, abs_end)
     tokens_with_spans = [make_token(span_with_span, token_with_span)
-                for span_with_span in space_tokenizer_with_spans(pruned)
+                for span_with_span in space_tokenizer(pruned)
                 for token_with_span in re_utils.split_with_spans(word_tokenizer.regex, span_with_span[0])
                 if token_with_span[0] != ""
             ]
@@ -439,20 +330,13 @@ def web_tokenizer(sentence):
     """
     The web tokenizer works like the :func:`word_tokenizer`, but does not split URIs or
     e-mail addresses. It also un-escapes all escape sequences (except in URIs or email addresses).
-    """
-    return [token for i, span in enumerate(web_tokenizer.split(sentence))
-            for token in ((span,) if i % 2 else word_tokenizer(unescape(span)))]
-
-
-def web_tokenizer_with_spans(sentence):
-    """
-    Like `web_tokenizer()` but with spans.
+    TODO: This doesn't currently properly handle escape sequences.
     """
     return [token_with_span
             for i, (span_text, span_span) in enumerate(re_utils.split_with_spans(web_tokenizer.regex, sentence))
             for token_with_span in (
                     ((span_text, span_span),) if i % 2
-                    else (span_utils.make_sub((span_text, span_span), (unescape(t_t), t_s)) for t_t, t_s in word_tokenizer_with_spans(span_text))
+                    else (span_utils.make_sub((span_text, span_span), (unescape(t_t), t_s)) for t_t, t_s in word_tokenizer(span_text))
                 )
         ]
 
@@ -462,11 +346,12 @@ def main():
     from argparse import ArgumentParser
     from sys import argv, stdout, stdin, stderr, getdefaultencoding, version_info
     from os import path, linesep
+    import utils
 
     def _tokenize(sentence, tokenizer):
         sep = None
 
-        for token in tokenizer(sentence):
+        for token in utils.without_spans(tokenizer(sentence)):
             if sep is not None:
                 stdout.write(sep)
 

@@ -21,7 +21,11 @@ Both modules can also be used from the command-line.
 While other Indo-European languages could work, it has only been designed with languages such as Spanish, English, and German in mind.
 For a more informed introduction to this tool, please read the article on my blog_.
 
-This version is modified to provide the spans into the original text for each output token. It currently only does so for some parts, and duplicates code.
+---------
+This fork
+---------
+
+This version is modified to provide the spans into the original text for each output token. Note that the code occasionally gets confusing names where the term "span" is also used to refer to sections of text.
 
 Install
 =======

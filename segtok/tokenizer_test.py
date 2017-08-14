@@ -4,7 +4,6 @@ import re
 from unittest import TestCase
 from segtok.tokenizer import space_tokenizer, symbol_tokenizer, word_tokenizer, web_tokenizer, IS_POSSESSIVE, \
     split_possessive_markers, IS_CONTRACTION, split_contractions
-from segtok.tokenizer import space_tokenizer_with_spans, symbol_tokenizer_with_spans, word_tokenizer_with_spans, web_tokenizer_with_spans, split_possessive_markers_with_spans, split_contractions_with_spans
 from segtok.tokenizer import unescape
 import span_utils
 
@@ -19,7 +18,7 @@ def test_tokenizer_with_spans(tester, tokenizer):
 
 class TestPossessiveMarker(TestCase):
     def setUp(self):
-        self.tokenizer = lambda t: split_possessive_markers(space_tokenizer(t))
+        self.tokenizer = test_tokenizer_with_spans(self, lambda t: split_possessive_markers(space_tokenizer(t)))
 
     def test_misses(self):
         self.assertIsNone(IS_POSSESSIVE.match("Frank'd"))
@@ -53,14 +52,9 @@ class TestPossessiveMarker(TestCase):
         self.assertEqual(marker, "\u2032s")
 
 
-class TestPossessiveMarkerWithSpan(TestPossessiveMarker):
-    def setUp(self):
-        self.tokenizer = test_tokenizer_with_spans(self, lambda t: split_possessive_markers_with_spans(space_tokenizer_with_spans(t)))
-
-
 class TestContractions(TestCase):
     def setUp(self):
-        self.tokenizer = lambda t: split_contractions(space_tokenizer(t))
+        self.tokenizer = test_tokenizer_with_spans(self, lambda t: split_contractions(space_tokenizer(t)))
 
     def test_misses(self):
         self.assertIsNone(IS_CONTRACTION.match("don'r"))
@@ -94,15 +88,10 @@ class TestContractions(TestCase):
         self.assertEqual(contraction, "\u2032d")
 
 
-class TestContractionsWithSpans(TestContractions):
-    def setUp(self):
-        self.tokenizer = test_tokenizer_with_spans(self, lambda t: split_contractions_with_spans(space_tokenizer_with_spans(t)))
-
-
 class TestSpaceTokenizer(TestCase):
 
     def setUp(self):
-        self.tokenizer = space_tokenizer
+        self.tokenizer = test_tokenizer_with_spans(self, space_tokenizer)
 
     def test_split(self):
         sentence = u" 1\n2\t3  4\t\n 5 "
@@ -112,15 +101,11 @@ class TestSpaceTokenizer(TestCase):
         sentence = u"1\u00A02\u2007 3  \u2007  "
         self.assertSequenceEqual([u'1', u'2', u'3'], self.tokenizer(sentence))
 
-class TestSpaceTokenizerWithSpans(TestSpaceTokenizer):
-
-    def setUp(self):
-        self.tokenizer = test_tokenizer_with_spans(self, space_tokenizer_with_spans)
 
 class TestSymbolTokenizer(TestCase):
 
     def setUp(self):
-        self.tokenizer = symbol_tokenizer
+        self.tokenizer = test_tokenizer_with_spans(self, symbol_tokenizer)
 
     def test_split(self):
         sentence = u"  1a. --  http://www.ex_ample.com  "
@@ -150,16 +135,10 @@ class TestSymbolTokenizer(TestCase):
         self.assertSequenceEqual(tokens, self.tokenizer(sentence))
 
 
-class TestSymbolTokenizerWithSpans(TestSymbolTokenizer):
-
-    def setUp(self):
-        self.tokenizer = test_tokenizer_with_spans(self, symbol_tokenizer_with_spans)
-
-
 class TestWordTokenizer(TestCase):
 
     def setUp(self):
-        self.tokenizer = word_tokenizer
+        self.tokenizer = test_tokenizer_with_spans(self, word_tokenizer)
 
     def assert_inner(self, sep):
         sentence = u" 123%s456 abc%sdef " % (sep, sep)
@@ -341,15 +320,12 @@ class TestWordTokenizer(TestCase):
                   u'/', u'to.file', u'?', u'kwd', u'=', u'1', u'&', u'arg']
         self.assertSequenceEqual(tokens, self.tokenizer(sentence))
 
-class TestWordTokenizerWithSpans(TestWordTokenizer):
-
-    def setUp(self):
-        self.tokenizer = test_tokenizer_with_spans(self, word_tokenizer_with_spans)
 
 class TestWebTokenizer(TestCase):
 
     def setUp(self):
-        self.tokenizer = web_tokenizer
+        ws_re = re.compile(r"\s+")
+        self.tokenizer = span_utils.test_sequencer_with_spans(self, web_tokenizer, normalize_token=lambda t: ws_re.sub("", t), normalize_original=lambda t: ws_re.sub("", unescape(t)))
 
     def test_URL(self):
         sentence = u"test ftps://user:pass@file.server.com:1234/get/me.this?what=that#part test"
@@ -402,9 +378,3 @@ class TestWebTokenizer(TestCase):
             children ( P = 0.02 ; http://univ.edu.es/study.html ) [ 20-22 ] .
         """.split()
         self.assertEqual(tokens, self.tokenizer(sentence))
-
-class TestWebTokenizerWithSpans(TestWebTokenizer):
-
-    def setUp(self):
-        ws_re = re.compile(r"\s+")
-        self.tokenizer = span_utils.test_sequencer_with_spans(self, web_tokenizer_with_spans, normalize_token=lambda t: ws_re.sub("", t), normalize_original=lambda t: ws_re.sub("", unescape(t)))

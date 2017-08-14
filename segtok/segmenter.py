@@ -194,8 +194,11 @@ def split_single(text, join_on_lowercase=False, short_sentence_length=SHORT_SENT
     """
     Default: split `text` at sentence terminals and at newline chars.
     """
-    sentences = _sentences(DO_NOT_CROSS_LINES.split(text), join_on_lowercase, short_sentence_length)
-    return [s for ss in sentences  for s in ss.split('\n')]
+    sentences = _sentences(re_utils.split_with_spans(DO_NOT_CROSS_LINES, text), join_on_lowercase, short_sentence_length)
+    return [span_utils.make_sub((ss_text, ss_span), s)
+            for ss_text, ss_span in sentences
+            for s in split_newline(ss_text)
+        ]
 
 
 def split_multi(text, join_on_lowercase=False, short_sentence_length=SHORT_SENTENCE_LENGTH):
@@ -203,7 +206,7 @@ def split_multi(text, join_on_lowercase=False, short_sentence_length=SHORT_SENTE
     Sentences may contain non-consecutive (single) newline chars, while consecutive newline chars
     ("paragraph separators") always split sentences.
     """
-    return _sentences(MAY_CROSS_ONE_LINE.split(text), join_on_lowercase, short_sentence_length)
+    return _sentences(re_utils.split_with_spans(MAY_CROSS_ONE_LINE, text), join_on_lowercase, short_sentence_length)
 
 
 def split_newline(text):
@@ -211,36 +214,6 @@ def split_newline(text):
     Split the `text` at newlines (``\\n'') and strip the lines,
     but only return lines with content.
     """
-    for line in text.split('\n'):
-        line = line.strip()
-
-        if line:
-            yield line
-
-
-def split_single_with_spans(text, join_on_lowercase=False, short_sentence_length=SHORT_SENTENCE_LENGTH):
-    """
-    Like `split_single()` but with spans.
-    """
-    sentences = _sentences_with_spans(re_utils.split_with_spans(DO_NOT_CROSS_LINES, text), join_on_lowercase, short_sentence_length)
-    return [span_utils.make_sub((ss_text, ss_span), s)
-            for ss_text, ss_span in sentences
-            for s in split_newline_with_spans(ss_text)
-        ]
-
-
-def split_multi_with_spans(text, join_on_lowercase=False, short_sentence_length=SHORT_SENTENCE_LENGTH):
-    """
-    Like `split_multi()` but with spans.
-    """
-    return _sentences_with_spans(re_utils.split_with_spans(MAY_CROSS_ONE_LINE, text), join_on_lowercase, short_sentence_length)
-
-
-def split_newline_with_spans(text):
-    """
-    Like `split_newline()` but with spans.
-    """
-
     start_i = 0
     for line in text.split('\n'):
         line = line.strip()
@@ -265,37 +238,7 @@ def rewrite_line_separators(text, pattern, join_on_lowercase=False,
     """
     offset = 0
 
-    for sentence in _sentences(pattern.split(text), join_on_lowercase, short_sentence_length):
-        start = text.index(sentence, offset)
-        intervening = text[offset:start]
-
-        if offset != 0 and '\n' not in intervening:
-            yield '\n'
-            intervening = intervening[1:]
-
-        yield intervening
-        yield sentence.replace('\n', ' ')
-        offset = start + len(sentence)
-
-    if offset < len(text):
-        yield text[offset:]
-
-
-def rewrite_line_separators_with_spans(text, pattern, join_on_lowercase=False,
-                            short_sentence_length=SHORT_SENTENCE_LENGTH):
-    """
-    Remove line separator chars inside sentences and ensure there is a ``\\n`` at their end.
-
-    :param text: input plain-text
-    :param pattern: for the initial sentence splitting
-    :param join_on_lowercase: always join sentences that start with lower-case
-    :param short_sentence_length: the upper boundary for text spans that are not split
-                                  into sentences inside brackets
-    :return: a generator yielding the spans of text
-    """
-    offset = 0
-
-    for sentence_text, sentence_span in _sentences_with_spans(re_utils.split_with_spans(pattern, text), join_on_lowercase, short_sentence_length):
+    for sentence_text, sentence_span in _sentences(re_utils.split_with_spans(pattern, text), join_on_lowercase, short_sentence_length):
         start = text.index(sentence_text, offset)
         intervening = text[offset:start]
 
@@ -322,39 +265,6 @@ def _sentences(spans, join_on_lowercase, short_sentence_length):
     shorterThanATypicalSentence = lambda c, l: c < short_sentence_length or l < short_sentence_length
 
     for current in _abbreviation_joiner(spans):
-        if last is not None:
-            if (join_on_lowercase or BEFORE_LOWER.match(last)) and LOWER_WORD.match(current):
-                last = '%s%s' % (last, current)
-            elif shorterThanATypicalSentence(len(current), len(last)) and _is_open(last) and (
-                _is_not_opened(current) or last.endswith(' et al. ') or (
-                    UPPER_CASE_END.search(last) and UPPER_CASE_START.match(current)
-                )
-            ):
-                last = '%s%s' % (last, current)
-            elif shorterThanATypicalSentence(len(current), len(last)) and _is_open(last, '[]') and (
-                _is_not_opened(current, '[]') or last.endswith(' et al. ') or (
-                    UPPER_CASE_END.search(last) and UPPER_CASE_START.match(current)
-                )
-            ):
-                last = '%s%s' % (last, current)
-            elif CONTINUATIONS.match(current):
-                last = '%s%s' % (last, current)
-            else:
-                yield last.strip()
-                last = current
-        else:
-            last = current
-
-    if last is not None:
-        yield last.strip()
-
-
-def _sentences_with_spans(spans, join_on_lowercase, short_sentence_length):
-    """Join spans back together into sentences as necessary."""
-    last = None
-    shorterThanATypicalSentence = lambda c, l: c < short_sentence_length or l < short_sentence_length
-
-    for current in _abbreviation_joiner_with_spans(spans):
         current_text, current_span = current
         if last is not None:
             last_text, last_span = last
@@ -391,41 +301,6 @@ def _sentences_with_spans(spans, join_on_lowercase, short_sentence_length):
 
 def _abbreviation_joiner(spans):
     """Join spans that match the ABBREVIATIONS pattern."""
-    segment = None
-    makeSentence = lambda start, end: ''.join(spans[start:end])
-    total = len(spans)
-
-    for pos in range(total):
-        if pos and pos % 2:  # even => segment, uneven => (potential) terminal
-            prev_s = spans[pos - 1]
-            marker = spans[pos]
-            next_s = spans[pos+1] if pos + 1 < total else None
-
-            if prev_s[-1:].isspace():
-                pass # join
-            elif marker[0] == '.' and ABBREVIATIONS.search(prev_s):
-                pass # join
-            elif marker[0] == '.' and next_s and (
-                    LONE_WORD.match(next_s) or
-                    (ENDS_IN_DATE_DIGITS.search(prev_s) and MONTH.match(next_s)) or
-                    (MIDDLE_INITIAL_END.search(prev_s) and UPPER_WORD_START.match(next_s))
-                    ):
-                pass # join
-            else:
-                yield makeSentence(segment, pos + 1)
-                segment = None
-        elif segment is None:
-            segment = pos
-
-    if segment is not None:
-        yield makeSentence(segment, total)
-
-
-def _abbreviation_joiner_with_spans(spans):
-    """Join spans that match the ABBREVIATIONS pattern."""
-
-    # Note: here the original code uses "span" to refer to an initial segment of the text
-
     spans = list(spans)
     segment = None
     def makeSentence(start, end):
@@ -526,6 +401,7 @@ def main():
     from argparse import ArgumentParser
     from sys import argv, stdout, stdin, stderr, getdefaultencoding, version_info
     from os import path, linesep
+    import utils
 
     single, multi = 0, 1
 
@@ -587,12 +463,12 @@ def main():
             tid = None
 
         if args.mode == single:
-            sentences = split_single(normal(text), short_sentence_length=args.bracket_spans)
+            sentences = utils.without_spans(split_single(normal(text), short_sentence_length=args.bracket_spans))
             text_spans = [i for s in sentences for i in (s, '\n')]
         else:
-            text_spans = rewrite_line_separators(
+            text_spans = utils.without_spans(rewrite_line_separators(
                 normal(text), pattern, short_sentence_length=args.bracket_spans
-            )
+            ))
 
         if tid is not None:
             def write_ids(tid, sid):
