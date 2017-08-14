@@ -28,6 +28,7 @@ except ImportError:
     from .segmenter import SENTENCE_TERMINALS, HYPHENS
 
 import re_utils
+import span_utils
 
 
 __author__ = 'Florian Leitner <florian.leitner@gmail.com>'
@@ -121,7 +122,29 @@ def split_possessive_markers(tokens):
     return tokens
 
 
-def split_contractions(tokens):
+def split_possessive_markers_with_spans(tokens):
+    """
+    Like `split_possessive_markers()` but with spans.
+    """
+    idx = -1
+
+    for token_text, token_span in list(tokens):
+        idx += 1
+
+        if IS_POSSESSIVE.match(token_text) is not None:
+            if token_text[-1].lower() == 's' and token_text[-2] in APOSTROPHES:
+                tokens.insert(idx, (token_text[:-2], (token_span[0], token_span[1] - 2)))
+                idx += 1
+                tokens[idx] = token_text[-2:], (token_span[1] - 2, token_span[1])
+            elif token_text[-2].lower() == 's' and token_text[-1] in APOSTROPHES:
+                tokens.insert(idx, (token_text[:-1], (token_span[0], token_span[1] - 1)))
+                idx += 1
+                tokens[idx] = token_text[-1:], (token_span[1] - 1, token_span[1])
+
+    return tokens
+
+
+def split_contractions(tokens_with_spans):
     """
     A function to split apostrophe contractions at the end of alphanumeric (and hyphenated) tokens.
 
@@ -132,7 +155,7 @@ def split_contractions(tokens):
     """
     idx = -1
 
-    for token in list(tokens):
+    for token in list(tokens_with_spans):
         idx += 1
 
         if IS_CONTRACTION.match(token) is not None:
@@ -144,11 +167,36 @@ def split_contractions(tokens):
                         if 2 < length and pos + 2 == length and token[-1] == 't' and token[pos - 1] == 'n':
                             pos -= 1
 
-                        tokens.insert(idx, token[:pos])
+                        tokens_with_spans.insert(idx, token[:pos])
                         idx += 1
-                        tokens[idx] = token[pos:]
+                        tokens_with_spans[idx] = token[pos:]
 
-    return tokens
+    return tokens_with_spans
+
+
+def split_contractions_with_spans(tokens_with_spans):
+    """
+    Like `split_contractions()` but with spans.
+    """
+    idx = -1
+
+    for token_text, token_span in list(tokens_with_spans):
+        idx += 1
+
+        if IS_CONTRACTION.match(token_text) is not None:
+            length = len(token_text)
+
+            if length > 1:
+                for pos in range(length - 1, -1, -1):
+                    if token_text[pos] in APOSTROPHES:
+                        if 2 < length and pos + 2 == length and token_text[-1] == 't' and token_text[pos - 1] == 'n':
+                            pos -= 1
+
+                        tokens_with_spans.insert(idx, (token_text[:pos], (token_span[0], token_span[0] + pos)))
+                        idx += 1
+                        tokens_with_spans[idx] = (token_text[pos:], (token_span[0] + pos, token_span[1]))
+
+    return tokens_with_spans
 
 
 def _matches(regex):
@@ -284,6 +332,16 @@ def space_tokenizer_with_spans(sentence):
     Like `space_tokenizer()` but keeps spans from the original text.
     """
     return [token_with_span for token_with_span in re_utils.split_with_spans(space_tokenizer.regex, sentence) if token_with_span[0] != ""]
+
+def symbol_tokenizer_with_spans(sentence):
+    """
+    Like `symbol_tokenizer()` but keeps spans from the original text.
+    """
+    return [span_utils.make_sub((span_text, span_span), token_with_span)
+            for span_text, span_span in space_tokenizer_with_spans(sentence)
+            for token_with_span in re_utils.split_with_spans(symbol_tokenizer.regex, span_text)
+            if token_with_span[0] != ""
+        ]
 
 def word_tokenizer_with_spans(sentence):
     """

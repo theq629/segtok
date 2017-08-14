@@ -4,7 +4,8 @@ import re
 from unittest import TestCase
 from segtok.tokenizer import space_tokenizer, symbol_tokenizer, word_tokenizer, web_tokenizer, IS_POSSESSIVE, \
     split_possessive_markers, IS_CONTRACTION, split_contractions
-from segtok.tokenizer import space_tokenizer_with_spans, word_tokenizer_with_spans
+from segtok.tokenizer import space_tokenizer_with_spans, symbol_tokenizer_with_spans, word_tokenizer_with_spans, split_possessive_markers_with_spans, split_contractions_with_spans
+from segtok.tokenizer import unescape
 import span_utils
 
 __author__ = 'Florian Leitner <florian.leitner@gmail.com>'
@@ -14,9 +15,11 @@ def test_tokenizer_with_spans(tester, tokenizer):
     newline_re = re.compile(r"\s*[\n\r]+\s*")
     def normalize(token_text):
         return newline_re.sub("", token_text)
-    return span_utils.test_sequencer_with_spans(tester, tokenizer, normalize_item=normalize)
+    return span_utils.test_sequencer_with_spans(tester, tokenizer, normalize_original=normalize)
 
 class TestPossessiveMarker(TestCase):
+    def setUp(self):
+        self.tokenizer = lambda t: split_possessive_markers(space_tokenizer(t))
 
     def test_misses(self):
         self.assertIsNone(IS_POSSESSIVE.match("Frank'd"))
@@ -32,7 +35,7 @@ class TestPossessiveMarker(TestCase):
         self.assertIsNotNone(IS_POSSESSIVE.match("home-less\u2032"))
 
     def test_split_with_s(self):
-        result = split_possessive_markers(["Fred's", 'is', "Frank's", 'bar', '.'])
+        result = self.tokenizer("Fred's is Frank's bar .")
         self.assertEqual(7, len(result), str(result))
         self.assertEqual(result[0], "Fred", str(result))
         self.assertEqual(result[1], "'s", str(result))
@@ -40,17 +43,24 @@ class TestPossessiveMarker(TestCase):
         self.assertEqual(result[4], "'s", str(result))
 
     def test_split_without_s(self):
-        stem, marker = split_possessive_markers(["CHARLES'"])
+        stem, marker = self.tokenizer("CHARLES'")
         self.assertEqual(stem, "CHARLES")
         self.assertEqual(marker, "'")
 
     def test_split_unicode(self):
-        stem, marker = split_possessive_markers(["a\u2032s"])
+        stem, marker = self.tokenizer("a\u2032s")
         self.assertEqual(stem, 'a')
         self.assertEqual(marker, "\u2032s")
 
 
+class TestPossessiveMarkerWithSpan(TestPossessiveMarker):
+    def setUp(self):
+        self.tokenizer = test_tokenizer_with_spans(self, lambda t: split_possessive_markers_with_spans(space_tokenizer_with_spans(t)))
+
+
 class TestContractions(TestCase):
+    def setUp(self):
+        self.tokenizer = lambda t: split_contractions(space_tokenizer(t))
 
     def test_misses(self):
         self.assertIsNone(IS_CONTRACTION.match("don'r"))
@@ -66,7 +76,7 @@ class TestContractions(TestCase):
         self.assertIsNotNone(IS_POSSESSIVE.match("home-less\u2032"))
 
     def test_split_regular(self):
-        result = split_contractions(["We'll", 'see', "her's", 'too', '!'])
+        result = self.tokenizer("We'll see her's too !")
         self.assertEqual(7, len(result), str(result))
         self.assertEqual(result[0], 'We', str(result))
         self.assertEqual(result[1], "'ll", str(result))
@@ -74,14 +84,19 @@ class TestContractions(TestCase):
         self.assertEqual(result[4], "'s", str(result))
 
     def test_split_not(self):
-        stem, contraction = split_contractions(["don't"])
+        stem, contraction = self.tokenizer("don't")
         self.assertEqual(stem, 'do')
         self.assertEqual(contraction, "n't")
 
     def test_split_unicode(self):
-        stem, contraction = split_contractions(["a\u2032d"])
+        stem, contraction = self.tokenizer("a\u2032d")
         self.assertEqual(stem, 'a')
         self.assertEqual(contraction, "\u2032d")
+
+
+class TestContractionsWithSpans(TestContractions):
+    def setUp(self):
+        self.tokenizer = test_tokenizer_with_spans(self, lambda t: split_contractions_with_spans(space_tokenizer_with_spans(t)))
 
 
 class TestSpaceTokenizer(TestCase):
@@ -133,6 +148,12 @@ class TestSymbolTokenizer(TestCase):
         sentence = u"per m\u00B3 earth"  # (superscript three)
         tokens = [u'per', u'm', u'\u00B3', u'earth']
         self.assertSequenceEqual(tokens, self.tokenizer(sentence))
+
+
+class TestSymbolTokenizerWithSpans(TestSymbolTokenizer):
+
+    def setUp(self):
+        self.tokenizer = test_tokenizer_with_spans(self, symbol_tokenizer_with_spans)
 
 
 class TestWordTokenizer(TestCase):

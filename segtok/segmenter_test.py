@@ -70,7 +70,7 @@ TEXT = ' '.join(SENTENCES)
 def test_segmenter_with_spans(tester, tokenizer):
     def normalize(token_text):
         return token_text.strip()
-    return span_utils.test_sequencer_with_spans(tester, tokenizer, normalize_item=normalize)
+    return span_utils.test_sequencer_with_spans(tester, tokenizer, normalize_original=normalize)
 
 
 class TestToUnixLinebreak(TestCase):
