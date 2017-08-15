@@ -17,6 +17,7 @@ except ImportError:
         # Python 2.x
         from HTMLParser import HTMLParser
     unescape = HTMLParser().unescape
+from cgi import escape
 
 from regex import compile, UNICODE, VERBOSE
 
@@ -330,13 +331,24 @@ def web_tokenizer(sentence):
     """
     The web tokenizer works like the :func:`word_tokenizer`, but does not split URIs or
     e-mail addresses. It also un-escapes all escape sequences (except in URIs or email addresses).
-    TODO: This doesn't currently properly handle escape sequences.
     """
+    def fix_regular_tokens(tokens_with_spans):
+        offset = 0
+        for token_text, token_span in tokens_with_spans:
+            token_span = offset + token_span[0], offset + token_span[1]
+            orig_token_text = sentence[token_span[0]:token_span[1]]
+            if orig_token_text != token_text:
+                escaped_token_text = escape(token_text)
+                escaped_token_span = token_span[0], token_span[0] + len(escaped_token_text)
+                if sentence[escaped_token_span[0]:escaped_token_span[1]] == escaped_token_text:
+                    offset += len(escaped_token_text) - len(token_text)
+                    token_span = escaped_token_span
+            yield token_text, token_span
     return [token_with_span
             for i, (span_text, span_span) in enumerate(re_utils.split_with_spans(web_tokenizer.regex, sentence))
             for token_with_span in (
                     ((span_text, span_span),) if i % 2
-                    else (span_utils.make_sub((span_text, span_span), (unescape(t_t), t_s)) for t_t, t_s in word_tokenizer(span_text))
+                    else fix_regular_tokens(span_utils.make_sub((span_text, span_span), t_w_s) for t_w_s in word_tokenizer(unescape(span_text)))
                 )
         ]
 
