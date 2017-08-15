@@ -5,7 +5,7 @@ from unittest import TestCase
 from segtok.tokenizer import space_tokenizer, symbol_tokenizer, word_tokenizer, web_tokenizer, IS_POSSESSIVE, \
     split_possessive_markers, IS_CONTRACTION, split_contractions
 from segtok.tokenizer import unescape
-import span_utils
+from . import span_utils
 
 __author__ = 'Florian Leitner <florian.leitner@gmail.com>'
 

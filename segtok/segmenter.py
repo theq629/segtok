@@ -28,8 +28,8 @@ Convert the text to Unix linebreaks if the case.
 from __future__ import absolute_import, unicode_literals
 import codecs
 from regex import compile, DOTALL, UNICODE, VERBOSE
-import re_utils
-import span_utils
+from . import re_utils
+from . import span_utils
 
 
 __author__ = 'Florian Leitner <florian.leitner@gmail.com>'
@@ -401,7 +401,7 @@ def main():
     from argparse import ArgumentParser
     from sys import argv, stdout, stdin, stderr, getdefaultencoding, version_info
     from os import path, linesep
-    import utils
+    from . import utils
 
     single, multi = 0, 1
 

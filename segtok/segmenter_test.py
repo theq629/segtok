@@ -4,7 +4,7 @@ from unittest import TestCase
 from segtok.segmenter import split_single, split_multi, MAY_CROSS_ONE_LINE, \
     split_newline, rewrite_line_separators, ABBREVIATIONS, CONTINUATIONS, \
     NON_UNIX_LINEBREAK, to_unix_linebreaks
-import span_utils
+from . import span_utils
 
 
 OSPL = """One sentence per line.
