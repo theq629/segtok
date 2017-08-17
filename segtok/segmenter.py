@@ -190,6 +190,16 @@ MAY_CROSS_ONE_LINE = _compile(2)
 "A segmentation pattern where two or more newline chars also terminate sentences."
 
 
+def strip_sent_with_span(text, span):
+    orig_len = len(text)
+    text = text.lstrip()
+    second_len = len(text)
+    left_offset = orig_len - len(text)
+    text = text.rstrip()
+    right_offset = second_len - len(text)
+    return text, (span[0] + left_offset, span[1] - right_offset)
+
+
 def split_single(text, join_on_lowercase=False, short_sentence_length=SHORT_SENTENCE_LENGTH):
     """
     Default: split `text` at sentence terminals and at newline chars.
@@ -216,11 +226,8 @@ def split_newline(text):
     """
     start_i = 0
     for line in text.split('\n'):
-        line = line.strip()
-
-        if line:
-            yield line, (start_i, start_i + len(line) + 1)
-
+        if line.strip():
+            yield strip_sent_with_span(line, (start_i, start_i + len(line)))
         start_i += len(line) + 1
 
 
@@ -289,14 +296,14 @@ def _sentences(spans, join_on_lowercase, short_sentence_length):
             if do_join:
                 last = ('%s%s' % (last_text, current_text), (last_span[0], current_span[1]))
             else:
-                yield (last_text.strip(), last_span)
+                yield strip_sent_with_span(last_text, last_span)
                 last = current
         else:
             last = current
 
     if last is not None:
         last_text, last_span = last
-        yield (last_text.strip(), last_span)
+        yield strip_sent_with_span(last_text, last_span)
 
 
 def _abbreviation_joiner(spans):

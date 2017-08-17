@@ -65,6 +65,8 @@ Always last, clear closing example."""
 SENTENCES = OSPL.split('\n')
 TEXT = ' '.join(SENTENCES)
 
+SPAN_TEST_TEXT = "Foo.\nBar. \n Baz."
+SPAN_TEST_ANSWER = [("Foo.", (0, 4)), ("Bar.", (5, 9)), ("Baz.", (12, 16))]
 
 def test_segmenter_with_spans(tester, tokenizer):
     def normalize(token_text):
@@ -218,3 +220,12 @@ class TestSentenceSegmenter(TestCase):
         a_text = OSPL.replace('\n', '\u2028').replace(' ', '\n')
         result = self.rewrite_line_separators(a_text, MAY_CROSS_ONE_LINE)
         self.assertSequenceEqual(OSPL, ''.join(result))
+
+    def test_newline_spans(self):
+        self.assertSequenceEqual(SPAN_TEST_ANSWER, list(split_newline(SPAN_TEST_TEXT)))
+
+    def test_single_spans(self):
+        self.assertSequenceEqual(SPAN_TEST_ANSWER, list(split_single(SPAN_TEST_TEXT)))
+
+    def test_multi_spans(self):
+        self.assertSequenceEqual(SPAN_TEST_ANSWER, list(split_multi(SPAN_TEST_TEXT)))
